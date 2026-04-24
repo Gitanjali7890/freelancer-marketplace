@@ -1,0 +1,655 @@
+﻿import { useState, useEffect } from 'react';
+import axios from 'axios';
+
+const API_URL = 'http://localhost:5000/api';
+
+function App() {
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [user, setUser] = useState(null);
+  const [showLogin, setShowLogin] = useState(true);
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [showBidModal, setShowBidModal] = useState(false);
+  const [bidForm, setBidForm] = useState({ amount: '', estimatedDays: '', coverLetter: '' });
+  const [myBids, setMyBids] = useState([]);
+  const [projectBids, setProjectBids] = useState({});
+  const [activeTab, setActiveTab] = useState('projects');
+  const [freelancers, setFreelancers] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [skillFilter, setSkillFilter] = useState('');
+  const [minRate, setMinRate] = useState('');
+  const [maxRate, setMaxRate] = useState('');
+  const [minRating, setMinRating] = useState('');
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    bio: '',
+    skills: [],
+    hourlyRate: '',
+    experience: ''
+  });
+  const [newSkill, setNewSkill] = useState('');
+
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    role: 'freelancer'
+  });
+
+  useEffect(() => {
+    fetchProjects();
+    if (token) {
+      fetchUser();
+    }
+  }, [token]);
+
+  const fetchProjects = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/projects`);
+      setProjects(response.data);
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchUser = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/auth/profile`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setUser(response.data);
+      setProfileForm({
+        bio: response.data.bio || '',
+        skills: response.data.skills || [],
+        hourlyRate: response.data.hourlyRate || '',
+        experience: response.data.experience || ''
+      });
+      if (response.data.role === 'freelancer') {
+        fetchMyBids();
+      } else if (response.data.role === 'client') {
+        fetchFreelancers();
+      }
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  };
+
+ const fetchMyBids = async () => {
+  try {
+    console.log('Fetching my bids...');
+    const response = await axios.get(`${API_URL}/bids/my-bids`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    console.log('Bids response:', response.data);
+    console.log('Number of bids:', response.data.length);
+    setMyBids(response.data);
+  } catch (error) {
+    console.error('Error fetching my bids:', error);
+    console.error('Error details:', error.response?.data);
+  }
+};
+
+  const fetchProjectBids = async (projectId) => {
+    try {
+      const response = await axios.get(`${API_URL}/bids/project/${projectId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setProjectBids(prev => ({ ...prev, [projectId]: response.data }));
+    } catch (error) {
+      console.error('Error fetching project bids:', error);
+    }
+  };
+
+  const fetchFreelancers = async () => {
+    try {
+      let url = `${API_URL}/freelancers?`;
+      const params = [];
+      if (searchTerm && searchTerm.trim()) {
+        params.push(`search=${encodeURIComponent(searchTerm.trim())}`);
+      }
+      if (skillFilter && skillFilter.trim()) {
+        params.push(`skill=${encodeURIComponent(skillFilter.trim())}`);
+      }
+      if (minRate && minRate > 0) {
+        params.push(`minRate=${minRate}`);
+      }
+      if (maxRate && maxRate > 0) {
+        params.push(`maxRate=${maxRate}`);
+      }
+      if (minRating && minRating > 0) {
+        params.push(`minRating=${minRating}`);
+      }
+      url += params.join('&');
+      const response = await axios.get(url);
+      setFreelancers(response.data);
+    } catch (error) {
+      console.error('Error fetching freelancers:', error);
+    }
+  };
+
+  const updateFreelancerProfile = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.put(`${API_URL}/freelancers/profile`, profileForm, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      alert('✅ Profile updated successfully!');
+      setEditingProfile(false);
+      fetchUser();
+    } catch (error) {
+      alert(error.response?.data?.message || 'Failed to update profile');
+    }
+  };
+
+  const addSkill = () => {
+    if (newSkill && !profileForm.skills.includes(newSkill)) {
+      setProfileForm({
+        ...profileForm,
+        skills: [...profileForm.skills, newSkill]
+      });
+      setNewSkill('');
+    }
+  };
+
+  const removeSkill = (skillToRemove) => {
+    setProfileForm({
+      ...profileForm,
+      skills: profileForm.skills.filter(skill => skill !== skillToRemove)
+    });
+  };
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await axios.post(`${API_URL}/auth/register`, formData);
+      localStorage.setItem('token', response.data.token);
+      setToken(response.data.token);
+      setUser(response.data.user);
+      setShowLogin(false);
+      alert('Registration successful!');
+    } catch (error) {
+      alert(error.response?.data?.message || 'Registration failed');
+    }
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await axios.post(`${API_URL}/auth/login`, {
+        email: formData.email,
+        password: formData.password
+      });
+      localStorage.setItem('token', response.data.token);
+      setToken(response.data.token);
+      setUser(response.data.user);
+      setShowLogin(false);
+      alert('Login successful!');
+    } catch (error) {
+      alert(error.response?.data?.message || 'Login failed');
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    setToken(null);
+    setUser(null);
+    setShowLogin(true);
+    setActiveTab('projects');
+  };
+
+  const createProject = async (e) => {
+    e.preventDefault();
+    const projectData = {
+      title: e.target.title.value,
+      description: e.target.description.value,
+      budget: parseInt(e.target.budget.value),
+      deadline: e.target.deadline.value
+    };
+    try {
+      await axios.post(`${API_URL}/projects`, projectData, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      alert('Project created!');
+      fetchProjects();
+      e.target.reset();
+    } catch (error) {
+      alert(error.response?.data?.message || 'Failed to create project');
+    }
+  };
+
+  const placeBid = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API_URL}/bids`, {
+        projectId: selectedProject._id,
+        amount: parseInt(bidForm.amount),
+        estimatedDays: parseInt(bidForm.estimatedDays),
+        coverLetter: bidForm.coverLetter
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      alert('Bid placed successfully!');
+      setShowBidModal(false);
+      setBidForm({ amount: '', estimatedDays: '', coverLetter: '' });
+      fetchMyBids();
+    } catch (error) {
+      alert(error.response?.data?.message || 'Failed to place bid');
+    }
+  };
+
+  const updateBidStatus = async (bidId, status, projectId) => {
+    try {
+      await axios.patch(`${API_URL}/bids/${bidId}`, { status }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      alert(`Bid ${status}!`);
+      await fetchProjectBids(projectId);
+      fetchProjects();
+    } catch (error) {
+      alert(error.response?.data?.message || 'Failed to update bid');
+    }
+  };
+
+  const completeProject = async (projectId) => {
+    if (window.confirm('Mark this project as completed?')) {
+      try {
+        await axios.patch(`${API_URL}/projects/${projectId}/complete`, {}, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        alert('✅ Project marked as completed!');
+        fetchProjects();
+      } catch (error) {
+        alert(error.response?.data?.message || 'Failed to complete project');
+      }
+    }
+  };
+
+  const getStatusBadge = (status) => {
+    switch(status) {
+      case 'open': return <span className="badge-open">🟢 OPEN</span>;
+      case 'in-progress': return <span className="badge-progress">🟡 IN PROGRESS</span>;
+      case 'completed': return <span className="badge-completed">🔵 COMPLETED</span>;
+      default: return <span className="badge-pending">{status}</span>;
+    }
+  };
+
+  const getBidStatusBadge = (status) => {
+    switch(status) {
+      case 'accepted': return <span className="badge-accepted">✅ ACCEPTED</span>;
+      case 'rejected': return <span className="badge-rejected">❌ REJECTED</span>;
+      default: return <span className="badge-pending">⏳ PENDING</span>;
+    }
+  };
+
+  if (loading) return <div className="flex justify-center items-center h-screen text-white">Loading...</div>;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      <nav className="bg-gray-900 border-b border-gray-700 sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
+              🚀 Freelancer Marketplace
+            </h1>
+            <div>
+              {user ? (
+                <div className="flex items-center gap-4">
+                  <span className="text-gray-300">Welcome, <span className="text-blue-400 font-semibold">{user.name}</span> ({user.role})</span>
+                  <button onClick={handleLogout} className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg">Logout</button>
+                </div>
+              ) : (
+                <button onClick={() => setShowLogin(!showLogin)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">
+                  Login
+                </button>
+              )}
+            </div>
+          </div>
+          {user && (
+            <div className="flex gap-2 mt-4 flex-wrap">
+              <button onClick={() => setActiveTab('projects')} className={`px-4 py-2 rounded-lg transition ${activeTab === 'projects' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}>📋 Projects</button>
+              {user.role === 'freelancer' && (
+                <>
+                  <button onClick={() => { setActiveTab('myBids'); fetchMyBids(); }} className={`px-4 py-2 rounded-lg transition ${activeTab === 'myBids' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}>💰 My Bids ({myBids.length})</button>
+                  <button onClick={() => setActiveTab('profile')} className={`px-4 py-2 rounded-lg transition ${activeTab === 'profile' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}>👤 My Profile</button>
+                </>
+              )}
+              {user.role === 'client' && (
+                <button onClick={() => { setActiveTab('freelancers'); fetchFreelancers(); }} className={`px-4 py-2 rounded-lg transition ${activeTab === 'freelancers' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}>🔍 Find Freelancers</button>
+              )}
+            </div>
+          )}
+        </div>
+      </nav>
+
+      <div className="container mx-auto px-4 py-8">
+        {!user ? (
+          <div className="max-w-md mx-auto bg-gray-800 rounded-xl p-6">
+            <h2 className="text-2xl font-bold mb-6 text-center text-blue-400">{showLogin ? 'Login' : 'Register'}</h2>
+            <form onSubmit={showLogin ? handleLogin : handleRegister}>
+              {!showLogin && (
+                <input type="text" placeholder="Full Name" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg mb-3 text-white" required />
+              )}
+              <input type="email" placeholder="Email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg mb-3 text-white" required />
+              <input type="password" placeholder="Password" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg mb-3 text-white" required />
+              {!showLogin && (
+                <select value={formData.role} onChange={(e) => setFormData({...formData, role: e.target.value})} className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg mb-3 text-white">
+                  <option value="freelancer">💼 Freelancer</option>
+                  <option value="client">👔 Client</option>
+                </select>
+              )}
+              <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg">{showLogin ? 'Login' : 'Register'}</button>
+            </form>
+          </div>
+        ) : (
+          <>
+            {/* Projects Tab */}
+            {activeTab === 'projects' && (
+              <div>
+                <h2 className="text-2xl font-bold mb-6 text-blue-400">📋 Projects ({projects.length})</h2>
+                <div className="grid gap-6">
+                  {projects.map(project => (
+                    <div key={project._id} className="bg-gray-800 rounded-xl p-6">
+                      <div className="flex justify-between items-start mb-3">
+                        <h3 className="text-xl font-bold text-blue-400">{project.title}</h3>
+                        {getStatusBadge(project.status)}
+                      </div>
+                      <p className="text-gray-300 mb-4">{project.description}</p>
+                      <div className="grid grid-cols-3 gap-3 mb-4 text-sm">
+                        <span className="text-green-400 font-bold">💰 ${project.budget}</span>
+                        <span className="text-gray-400">👤 {project.clientId?.name}</span>
+                        <span className="text-gray-400">📅 {new Date(project.deadline).toLocaleDateString()}</span>
+                      </div>
+                      
+                      {user.role === 'freelancer' && project.status === 'open' && (
+                        <button onClick={() => { setSelectedProject(project); setShowBidModal(true); }} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">📝 Place Bid</button>
+                      )}
+                      
+                      {user.role === 'client' && (project.clientId?._id === user.id || project.clientId?.email === user.email) && (
+                        <div>
+                          <button onClick={() => fetchProjectBids(project._id)} className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg">
+                            👁️ View Bids ({projectBids[project._id]?.length || 0})
+                          </button>
+                          
+                          {projectBids[project._id] && projectBids[project._id].length > 0 && (
+                            <div className="mt-4">
+                              <h4 className="font-semibold text-yellow-400 mb-3">📌 Bids Received:</h4>
+                              {projectBids[project._id].map(bid => (
+                                <div key={bid._id} className="bg-gray-700 rounded-lg p-4 mb-3">
+                                  <div className="flex justify-between items-start flex-wrap">
+                                    <div>
+                                      <p className="font-semibold text-blue-400">{bid.freelancerId?.name}</p>
+                                      <p className="text-green-400 font-bold">💰 ${bid.amount}</p>
+                                      <p className="text-gray-300">📅 Est. {bid.estimatedDays} days</p>
+                                      <p className="text-gray-400 mt-2">{bid.coverLetter}</p>
+                                    </div>
+                                    <div className="text-right">
+                                      {getBidStatusBadge(bid.status)}
+                                      {bid.status === 'pending' && project.status === 'open' && (
+                                        <div className="mt-2 flex gap-2">
+                                          <button onClick={() => updateBidStatus(bid._id, 'accepted', project._id)} className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded">Accept</button>
+                                          <button onClick={() => updateBidStatus(bid._id, 'rejected', project._id)} className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded">Reject</button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          
+                          {project.status === 'in-progress' && (
+                            <button onClick={() => completeProject(project._id)} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg mt-3">✅ Mark as Completed</button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Freelancer Profile Tab */}
+            {activeTab === 'profile' && user.role === 'freelancer' && (
+              <div className="max-w-3xl mx-auto">
+                <div className="bg-gray-800 rounded-xl p-6">
+                  <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold text-blue-400">👤 My Profile</h2>
+                    <button onClick={() => setEditingProfile(!editingProfile)} className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg">
+                      {editingProfile ? 'Cancel' : 'Edit Profile'}
+                    </button>
+                  </div>
+                  
+                  {!editingProfile ? (
+                    <div>
+                      <div className="mb-4">
+                        <h3 className="text-lg font-semibold text-gray-300">Name</h3>
+                        <p className="text-white">{user.name}</p>
+                      </div>
+                      <div className="mb-4">
+                        <h3 className="text-lg font-semibold text-gray-300">Email</h3>
+                        <p className="text-white">{user.email}</p>
+                      </div>
+                      <div className="mb-4">
+                        <h3 className="text-lg font-semibold text-gray-300">Rating</h3>
+                        <p className="text-yellow-400">⭐ {user.rating?.toFixed(1) || '0'} ({user.totalReviews || 0} reviews)</p>
+                      </div>
+                      <div className="mb-4">
+                        <h3 className="text-lg font-semibold text-gray-300">Completed Projects</h3>
+                        <p className="text-green-400">{user.completedProjects || 0} projects</p>
+                      </div>
+                      <div className="mb-4">
+                        <h3 className="text-lg font-semibold text-gray-300">About Me</h3>
+                        <p className="text-gray-300">{user.bio || 'No bio added yet'}</p>
+                      </div>
+                      <div className="mb-4">
+                        <h3 className="text-lg font-semibold text-gray-300">Experience</h3>
+                        <p className="text-gray-300">{user.experience || 'No experience added yet'}</p>
+                      </div>
+                      <div className="mb-4">
+                        <h3 className="text-lg font-semibold text-gray-300">Hourly Rate</h3>
+                        <p className="text-green-400">${user.hourlyRate || '0'}/hour</p>
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-300 mb-2">Skills</h3>
+                        <div className="flex flex-wrap gap-2">
+                          {user.skills?.length > 0 ? user.skills.map(skill => (
+                            <span key={skill} className="bg-blue-900 text-blue-300 px-3 py-1 rounded-full text-sm">{skill}</span>
+                          )) : <p className="text-gray-400">No skills added yet</p>}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <form onSubmit={updateFreelancerProfile}>
+                      <div className="mb-4">
+                        <label className="block text-gray-300 mb-2">About Me</label>
+                        <textarea value={profileForm.bio} onChange={(e) => setProfileForm({...profileForm, bio: e.target.value})} rows="4" className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" placeholder="Tell clients about yourself..."></textarea>
+                      </div>
+                      <div className="mb-4">
+                        <label className="block text-gray-300 mb-2">Experience</label>
+                        <textarea value={profileForm.experience} onChange={(e) => setProfileForm({...profileForm, experience: e.target.value})} rows="3" className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" placeholder="Your work experience..."></textarea>
+                      </div>
+                      <div className="mb-4">
+                        <label className="block text-gray-300 mb-2">Hourly Rate ($)</label>
+                        <input type="number" value={profileForm.hourlyRate} onChange={(e) => setProfileForm({...profileForm, hourlyRate: e.target.value})} className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" />
+                      </div>
+                      <div className="mb-4">
+                        <label className="block text-gray-300 mb-2">Skills</label>
+                        <div className="flex gap-2 mb-2">
+                          <input type="text" value={newSkill} onChange={(e) => setNewSkill(e.target.value)} className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" placeholder="Add a skill (e.g., React, Python)" />
+                          <button type="button" onClick={addSkill} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg">Add</button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {profileForm.skills.map(skill => (
+                            <span key={skill} className="bg-blue-900 text-blue-300 px-3 py-1 rounded-full text-sm flex items-center gap-2">
+                              {skill}
+                              <button type="button" onClick={() => removeSkill(skill)} className="text-red-400 hover:text-red-300">×</button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg">Save Profile</button>
+                    </form>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Find Freelancers Tab for Clients */}
+            {activeTab === 'freelancers' && user.role === 'client' && (
+              <div>
+                <h2 className="text-2xl font-bold mb-6 text-blue-400">🔍 Find Freelancers</h2>
+                
+                {/* Search and Filters */}
+                <div className="bg-gray-800 rounded-xl p-6 mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <input type="text" placeholder="🔍 Search by name..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" />
+                    <input type="text" placeholder="💡 Filter by skill..." value={skillFilter} onChange={(e) => setSkillFilter(e.target.value)} className="px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" />
+                    <input type="number" placeholder="💰 Min Rate ($/hr)" value={minRate} onChange={(e) => setMinRate(e.target.value)} className="px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" />
+                    <input type="number" placeholder="💰 Max Rate ($/hr)" value={maxRate} onChange={(e) => setMaxRate(e.target.value)} className="px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" />
+                    <select value={minRating} onChange={(e) => setMinRating(e.target.value)} className="px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white">
+                      <option value="">⭐ Min Rating</option>
+                      <option value="4.5">4.5+ Stars</option>
+                      <option value="4">4+ Stars</option>
+                      <option value="3.5">3.5+ Stars</option>
+                      <option value="3">3+ Stars</option>
+                    </select>
+                  </div>
+                  <button onClick={fetchFreelancers} className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg">Apply Filters</button>
+                </div>
+                
+                {/* Freelancers List */}
+                <div className="grid gap-6">
+                  {!freelancers || freelancers.length === 0 ? (
+                    <div className="bg-gray-800 rounded-xl p-12 text-center">
+                      <p className="text-gray-400">No freelancers found matching your criteria.</p>
+                      <button 
+                        onClick={() => {
+                          setSearchTerm('');
+                          setSkillFilter('');
+                          setMinRate('');
+                          setMaxRate('');
+                          setMinRating('');
+                          fetchFreelancers();
+                        }} 
+                        className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+                      >
+                        Clear Filters
+                      </button>
+                    </div>
+                  ) : (
+                    freelancers.map(freelancer => (
+                      <div key={freelancer._id} className="bg-gray-800 rounded-xl p-6 hover:border-blue-500 transition border border-gray-700">
+                        <div className="flex justify-between items-start flex-wrap">
+                          <div className="flex-1">
+                            <h3 className="text-xl font-bold text-blue-400">{freelancer.name}</h3>
+                            <div className="flex items-center gap-3 mt-1 mb-2 flex-wrap">
+                              <span className="text-yellow-400">⭐ {freelancer.rating?.toFixed(1) || '0'} ({freelancer.totalReviews || 0} reviews)</span>
+                              <span className="text-green-400">💰 ${freelancer.hourlyRate || '0'}/hour</span>
+                              <span className="text-purple-400">✅ {freelancer.completedProjects || 0} projects completed</span>
+                            </div>
+                            <p className="text-gray-300 mb-3">{freelancer.bio || 'No bio provided'}</p>
+                            <p className="text-gray-400 text-sm mb-3">{freelancer.experience || 'No experience listed'}</p>
+                            <div className="flex flex-wrap gap-2">
+                              {freelancer.skills && freelancer.skills.length > 0 ? (
+                                freelancer.skills.map(skill => (
+                                  <span key={skill} className="bg-blue-900 text-blue-300 px-3 py-1 rounded-full text-sm">{skill}</span>
+                                ))
+                              ) : (
+                                <span className="text-gray-500 text-sm">No skills listed</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="ml-4">
+                            <button 
+                              onClick={() => {
+                                alert(`Contact ${freelancer.name} at ${freelancer.email}`);
+                              }} 
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+                            >
+                              Contact
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+{/* My Bids Tab for Freelancers */}
+{activeTab === 'myBids' && user.role === 'freelancer' && (
+  <div>
+    <h2 className="text-2xl font-bold mb-6 text-blue-400">💰 My Bids ({myBids.length})</h2>
+    {myBids.length === 0 ? (
+      <div className="bg-gray-800 rounded-xl p-12 text-center">
+        <p className="text-gray-400">You haven't placed any bids yet.</p>
+        <button 
+          onClick={() => setActiveTab('projects')} 
+          className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+        >
+          Browse Projects
+        </button>
+      </div>
+    ) : (
+      <div className="grid gap-4">
+        {myBids.map((bid) => (
+          <div key={bid._id} className="bg-gray-800 rounded-xl p-6 border border-gray-700">
+            <div className="flex justify-between items-start flex-wrap">
+              <div className="flex-1">
+                <h3 className="text-xl font-bold text-blue-400">{bid.projectId?.title || 'Unknown Project'}</h3>
+                <p className="text-green-400 font-bold text-lg mt-2">💰 Bid Amount: ${bid.amount}</p>
+                <p className="text-gray-300">📅 Estimated Days: {bid.estimatedDays} days</p>
+                <p className="text-gray-400 mt-2">📊 Project Budget: ${bid.projectId?.budget || 'N/A'}</p>
+                <p className="text-gray-400">👤 Client: {bid.projectId?.clientId?.name || 'Unknown'}</p>
+                <p className="text-gray-400 mt-2">💬 Your Cover Letter: "{bid.coverLetter}"</p>
+                <p className="text-gray-400">📅 Bid Placed: {new Date(bid.createdAt).toLocaleDateString()}</p>
+              </div>
+              <div className="text-right ml-4">
+                {bid.status === 'accepted' && (
+                  <span className="bg-green-900 text-green-300 px-4 py-2 rounded-full text-sm font-semibold inline-block">✅ ACCEPTED</span>
+                )}
+                {bid.status === 'rejected' && (
+                  <span className="bg-red-900 text-red-300 px-4 py-2 rounded-full text-sm font-semibold inline-block">❌ REJECTED</span>
+                )}
+                {bid.status === 'pending' && (
+                  <span className="bg-yellow-900 text-yellow-300 px-4 py-2 rounded-full text-sm font-semibold inline-block">⏳ PENDING</span>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+)}
+
+
+
+      {/* Bid Modal */}
+      {showBidModal && selectedProject && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-xl max-w-md w-full p-6">
+            <h2 className="text-xl font-bold text-blue-400 mb-4">📝 Place Bid on: {selectedProject.title}</h2>
+            <form onSubmit={placeBid}>
+              <input type="number" placeholder="Bid Amount ($)" value={bidForm.amount} onChange={(e) => setBidForm({...bidForm, amount: e.target.value})} className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg mb-3 text-white" required />
+              <input type="number" placeholder="Estimated Days" value={bidForm.estimatedDays} onChange={(e) => setBidForm({...bidForm, estimatedDays: e.target.value})} className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg mb-3 text-white" required />
+              <textarea placeholder="Cover Letter" rows="4" value={bidForm.coverLetter} onChange={(e) => setBidForm({...bidForm, coverLetter: e.target.value})} className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg mb-4 text-white" required></textarea>
+              <div className="flex gap-3">
+                <button type="submit" className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg">Submit Bid</button>
+                <button type="button" onClick={() => setShowBidModal(false)} className="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 rounded-lg">Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default App;
